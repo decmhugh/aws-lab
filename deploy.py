@@ -26,9 +26,16 @@ def deploy_cloudformation(stack_name, template_file, s3_bucket, region):
         print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    stack_name = "dmh-aws-lake-formation"
-    template_file = "aws-lake-formation/template.yaml"
-    s3_bucket = "your-s3-bucket"
+    #stack_name = "dmh-aws-lake-formation"
+    #template_file = "aws-lake-formation/template.yaml"
+    #s3_bucket = "dmh-default-bucket"
+    #region = "eu-west-1"
+
+    #deploy_cloudformation(stack_name, template_file, s3_bucket, region)
+
+    stack_name = "dmh-aws-vpc-multi-tier"
+    template_file = "aws-vpc-multi-tier/template.yaml"
+    s3_bucket = "dmh-default-bucket"
     region = "eu-west-1"
 
     deploy_cloudformation(stack_name, template_file, s3_bucket, region)
