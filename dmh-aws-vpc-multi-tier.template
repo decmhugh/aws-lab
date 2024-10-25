@@ -1,0 +1,2136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform:
+- AWS::Serverless-2016-10-31
+Parameters:
+  AvailabilityZonesA:
+    Type: String
+    Default: eu-west-1
+  AvailabilityZonesB:
+    Type: String
+    Default: eu-west-2
+  AvailabilityZonesC:
+    Type: String
+    Default: eu-west-3
+  CreateAdditionalPrivateSubnets:
+    Type: String
+    Default: 'false'
+  CreateNATGateways:
+    Type: String
+    Default: 'true'
+  CreatePublicSubnets:
+    Type: String
+    Default: 'true'
+  CreatePrivateSubnets:
+    Type: String
+    Default: 'true'
+  CreateVPCFlowLogsToCloudWatch:
+    Type: String
+    Default: 'false'
+  NumberOfAZs:
+    Type: String
+    Default: '3'
+  PrivateSubnet1ACIDR:
+    Type: String
+    Default: 10.0.0.0/19
+  PrivateSubnet1BCIDR:
+    Type: String
+    Default: 10.0.192.0/21
+  PrivateSubnet2ACIDR:
+    Type: String
+    Default: 10.0.32.0/19
+  PrivateSubnet2BCIDR:
+    Type: String
+    Default: 10.0.200.0/21
+  PrivateSubnet3ACIDR:
+    Type: String
+    Default: 10.0.64.0/19
+  PrivateSubnet3BCIDR:
+    Type: String
+    Default: 10.0.208.0/21
+  PrivateSubnet4ACIDR:
+    Type: String
+    Default: 10.0.96.0/19
+  PrivateSubnet4BCIDR:
+    Type: String
+    Default: 10.0.216.0/21
+  PrivateSubnetATag1:
+    Type: String
+    Default: Network=Private
+  PrivateSubnetATag2:
+    Type: String
+    Default: ''
+  PrivateSubnetATag3:
+    Type: String
+    Default: ''
+  PrivateSubnetBTag1:
+    Type: String
+    Default: Network=Private
+  PrivateSubnetBTag2:
+    Type: String
+    Default: ''
+  PrivateSubnetBTag3:
+    Type: String
+    Default: ''
+  PublicSubnet1CIDR:
+    Type: String
+    Default: 10.0.128.0/20
+  PublicSubnet2CIDR:
+    Type: String
+    Default: 10.0.144.0/20
+  PublicSubnet3CIDR:
+    Type: String
+    Default: 10.0.160.0/20
+  PublicSubnet4CIDR:
+    Type: String
+    Default: 10.0.176.0/20
+  PublicSubnetTag1:
+    Type: String
+    Default: Network=Public
+  PublicSubnetTag2:
+    Type: String
+    Default: ''
+  PublicSubnetTag3:
+    Type: String
+    Default: ''
+  VPCCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+  VPCFlowLogsCloudWatchKMSKey:
+    Type: String
+    Default: ''
+  VPCFlowLogsLogFormat:
+    Type: String
+    Default: ${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport}
+      ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}
+  VPCFlowLogsLogGroupRetention:
+    Type: String
+    Default: 14
+  VPCFlowLogsMaxAggregationInterval:
+    Type: String
+    Default: 600
+  VPCFlowLogsTrafficType:
+    Type: String
+    Default: REJECT
+  VPCTenancy:
+    Type: String
+    Description: The allowed tenancy of instances launched into the VPC.
+    AllowedValues:
+    - default
+    - dedicated
+    Default: default
+Rules:
+  NAT:
+    RuleCondition:
+      Fn::Equals:
+      - Ref: CreateNATGateways
+      - 'true'
+    Assertions:
+    - Assert:
+        Fn::And:
+        - Fn::Equals:
+          - Ref: CreatePrivateSubnets
+          - 'true'
+        - Fn::Equals:
+          - Ref: CreatePublicSubnets
+          - 'true'
+      AssertDescription: To enable NAT gateways, both CreatePrivateSubnets and CreatePublicSubnets
+        must be set to 'true'.
+  Subnets:
+    Assertions:
+    - Assert:
+        Fn::Or:
+        - Fn::Equals:
+          - Ref: CreatePrivateSubnets
+          - 'true'
+        - Fn::Equals:
+          - Ref: CreatePublicSubnets
+          - 'true'
+      AssertDescription: At least one of CreatePublicSubnets or CreatePrivateSubnets
+        must be set to 'true'.
+Conditions:
+  3AZCondition:
+    Fn::Or:
+    - Fn::Equals:
+      - Ref: NumberOfAZs
+      - '3'
+    - Condition: 4AZCondition
+  4AZCondition:
+    Fn::Equals:
+    - Ref: NumberOfAZs
+    - '4'
+  AdditionalPrivateSubnetsCondition:
+    Fn::And:
+    - Fn::Equals:
+      - Ref: CreatePrivateSubnets
+      - 'true'
+    - Fn::Equals:
+      - Ref: CreateAdditionalPrivateSubnets
+      - 'true'
+  AdditionalPrivateSubnets&3AZCondition:
+    Fn::And:
+    - Condition: AdditionalPrivateSubnetsCondition
+    - Condition: 3AZCondition
+  AdditionalPrivateSubnets&4AZCondition:
+    Fn::And:
+    - Condition: AdditionalPrivateSubnetsCondition
+    - Condition: 4AZCondition
+  AdditionalPrivateSubnets&PublicSubnets&NatGatewaysCondition:
+    Fn::And:
+    - Condition: AdditionalPrivateSubnetsCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: NATGatewaysCondition
+  AdditionalPrivateSubnets&PublicSubnets&NatGateways&3AZCondition:
+    Fn::And:
+    - Condition: AdditionalPrivateSubnets&3AZCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: NATGatewaysCondition
+  AdditionalPrivateSubnets&PublicSubnets&NatGateways&4AZCondition:
+    Fn::And:
+    - Condition: AdditionalPrivateSubnets&4AZCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: NATGatewaysCondition
+  NATGatewaysCondition:
+    Fn::Equals:
+    - Ref: CreateNATGateways
+    - 'true'
+  NATGateways&PublicSubnets&PrivateSubnetsCondition:
+    Fn::And:
+    - Condition: NATGatewaysCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: PrivateSubnetsCondition
+  NATGateways&PublicSubnets&PrivateSubnets&3AZCondition:
+    Fn::And:
+    - Condition: NATGatewaysCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: PrivateSubnetsCondition
+    - Condition: 3AZCondition
+  NATGateways&PublicSubnets&PrivateSubnets&4AZCondition:
+    Fn::And:
+    - Condition: NATGatewaysCondition
+    - Condition: PublicSubnetsCondition
+    - Condition: PrivateSubnetsCondition
+    - Condition: 4AZCondition
+  NVirginiaRegionCondition:
+    Fn::Equals:
+    - Ref: AWS::Region
+    - us-east-1
+  PrivateSubnetsCondition:
+    Fn::Equals:
+    - Ref: CreatePrivateSubnets
+    - 'true'
+  PrivateSubnets&3AZCondition:
+    Fn::And:
+    - Condition: PrivateSubnetsCondition
+    - Condition: 3AZCondition
+  PrivateSubnets&4AZCondition:
+    Fn::And:
+    - Condition: PrivateSubnetsCondition
+    - Condition: 4AZCondition
+  PublicSubnetsCondition:
+    Fn::Equals:
+    - Ref: CreatePublicSubnets
+    - 'true'
+  PublicSubnets&3AZCondition:
+    Fn::And:
+    - Condition: PublicSubnetsCondition
+    - Condition: 3AZCondition
+  PublicSubnets&4AZCondition:
+    Fn::And:
+    - Condition: PublicSubnetsCondition
+    - Condition: 4AZCondition
+  PrivateSubnetATag1Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetATag1
+      - ''
+  PrivateSubnetATag2Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetATag2
+      - ''
+  PrivateSubnetATag3Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetATag3
+      - ''
+  PrivateSubnetBTag1Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetBTag1
+      - ''
+  PrivateSubnetBTag2Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetBTag2
+      - ''
+  PrivateSubnetBTag3Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PrivateSubnetBTag3
+      - ''
+  PublicSubnetTag1Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PublicSubnetTag1
+      - ''
+  PublicSubnetTag2Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PublicSubnetTag2
+      - ''
+  PublicSubnetTag3Condition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: PublicSubnetTag3
+      - ''
+  VPCFlowLogsCloudWatchKMSKeyCondition:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: VPCFlowLogsCloudWatchKMSKey
+      - ''
+  VPCFlowLogsToCloudWatchCondition:
+    Fn::Equals:
+    - Ref: CreateVPCFlowLogsToCloudWatch
+    - 'true'
+Resources:
+  DHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName:
+        Fn::If:
+        - NVirginiaRegionCondition
+        - ec2.internal
+        - Fn::Sub: ${AWS::Region}.compute.internal
+      DomainNameServers:
+      - AmazonProvidedDNS
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: ${AWS::StackName} stack DHCPOptions
+      - Key: StackName
+        Value:
+          Ref: AWS::StackName
+    Metadata:
+      SamResourceId: DHCPOptions
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: VPCCIDR
+      InstanceTenancy:
+        Ref: VPCTenancy
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+    Metadata:
+      SamResourceId: VPC
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId:
+        Ref: VPC
+      DhcpOptionsId:
+        Ref: DHCPOptions
+    Metadata:
+      SamResourceId: VPCDHCPOptionsAssociation
+  InternetGateway:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+    Metadata:
+      SamResourceId: InternetGateway
+  VPCGatewayAttachment:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+    Metadata:
+      SamResourceId: VPCGatewayAttachment
+  PrivateSubnet1A:
+    Condition: PrivateSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet1ACIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesA
+      Tags:
+      - Key: Name
+        Value: Private subnet 1A
+      - Fn::If:
+        - PrivateSubnetATag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet1A
+  PrivateSubnet1B:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet1BCIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesA
+      Tags:
+      - Key: Name
+        Value: Private subnet 1B
+      - Fn::If:
+        - PrivateSubnetBTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet1B
+  PrivateSubnet2A:
+    Condition: PrivateSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet2ACIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesA
+      Tags:
+      - Key: Name
+        Value: Private subnet 2A
+      - Fn::If:
+        - PrivateSubnetATag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet2A
+  PrivateSubnet2B:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet2BCIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesB
+      Tags:
+      - Key: Name
+        Value: Private subnet 2B
+      - Fn::If:
+        - PrivateSubnetBTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet2B
+  PrivateSubnet3A:
+    Condition: PrivateSubnets&3AZCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet3ACIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesC
+      Tags:
+      - Key: Name
+        Value: Private subnet 3A
+      - Fn::If:
+        - PrivateSubnetATag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet3A
+  PrivateSubnet3B:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet3BCIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesC
+      Tags:
+      - Key: Name
+        Value: Private subnet 3B
+      - Fn::If:
+        - PrivateSubnetBTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet3B
+  PrivateSubnet4A:
+    Condition: PrivateSubnets&4AZCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet4ACIDR
+      AvailabilityZone:
+        Fn::Select:
+        - 3
+        - Ref: AvailabilityZones
+      Tags:
+      - Key: Name
+        Value: Private subnet 4A
+      - Fn::If:
+        - PrivateSubnetATag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetATag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetATag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet4A
+  PrivateSubnet4B:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet4BCIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesC
+      Tags:
+      - Key: Name
+        Value: Private subnet 4B
+      - Fn::If:
+        - PrivateSubnetBTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PrivateSubnetBTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PrivateSubnetBTag3
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: PrivateSubnet4B
+  PublicSubnet1:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W33
+          reason: (W33) EC2 Subnet should not have MapPublicIpOnLaunch set to true.
+      SamResourceId: PublicSubnet1
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicSubnet1CIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesA
+      Tags:
+      - Key: Name
+        Value: Public subnet 1
+      - Fn::If:
+        - PublicSubnetTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+        - Ref: AWS::NoValue
+      MapPublicIpOnLaunch: true
+  PublicSubnet2:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::Subnet
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W33
+          reason: (W33) EC2 Subnet should not have MapPublicIpOnLaunch set to true.
+      SamResourceId: PublicSubnet2
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicSubnet2CIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesB
+      Tags:
+      - Key: Name
+        Value: Public subnet 2
+      - Fn::If:
+        - PublicSubnetTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+        - Ref: AWS::NoValue
+      MapPublicIpOnLaunch: true
+  PublicSubnet3:
+    Condition: PublicSubnets&3AZCondition
+    Type: AWS::EC2::Subnet
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W33
+          reason: (W33) EC2 Subnet should not have MapPublicIpOnLaunch set to true.
+      SamResourceId: PublicSubnet3
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicSubnet3CIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesC
+      Tags:
+      - Key: Name
+        Value: Public subnet 3
+      - Fn::If:
+        - PublicSubnetTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+        - Ref: AWS::NoValue
+      MapPublicIpOnLaunch: true
+  PublicSubnet4:
+    Condition: PublicSubnets&4AZCondition
+    Type: AWS::EC2::Subnet
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W33
+          reason: (W33) EC2 Subnet should not have MapPublicIpOnLaunch set to true.
+      SamResourceId: PublicSubnet4
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicSubnet4CIDR
+      AvailabilityZone:
+        Ref: AvailabilityZonesC
+      Tags:
+      - Key: Name
+        Value: Public subnet 4
+      - Fn::If:
+        - PublicSubnetTag1Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag1
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag2Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag2
+        - Ref: AWS::NoValue
+      - Fn::If:
+        - PublicSubnetTag3Condition
+        - Key:
+            Fn::Select:
+            - 0
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+          Value:
+            Fn::Select:
+            - 1
+            - Fn::Split:
+              - '='
+              - Ref: PublicSubnetTag3
+        - Ref: AWS::NoValue
+      MapPublicIpOnLaunch: true
+  PrivateSubnet1ARouteTable:
+    Condition: PrivateSubnetsCondition
+    Description: Private subnet 1A route table.
+    Value:
+      Ref: PrivateSubnet1ARouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet1ARouteTable
+  PrivateSubnet1ARoute:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet1ARouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway1
+    Metadata:
+      SamResourceId: PrivateSubnet1ARoute
+  PrivateSubnet1ARouteTableAssociation:
+    Condition: PrivateSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1A
+      RouteTableId:
+        Ref: PrivateSubnet1ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet1ARouteTableAssociation
+  PrivateSubnet2ARouteTable:
+    Condition: PrivateSubnetsCondition
+    Value:
+      Ref: PrivateSubnet2ARouteTable
+    Description: Private subnet 2A route table.
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet2ARouteTable
+  PrivateSubnet2ARoute:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet2ARouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway2
+    Metadata:
+      SamResourceId: PrivateSubnet2ARoute
+  PrivateSubnet2ARouteTableAssociation:
+    Condition: PrivateSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2A
+      RouteTableId:
+        Ref: PrivateSubnet2ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet2ARouteTableAssociation
+  PrivateSubnet3ARouteTable:
+    Condition: PrivateSubnets&3AZCondition
+    Description: Private subnet 3A route table.
+    Value:
+      Ref: PrivateSubnet3ARouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet3ARouteTable
+  PrivateSubnet3ARoute:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&3AZCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet3ARouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway3
+    Metadata:
+      SamResourceId: PrivateSubnet3ARoute
+  PrivateSubnet3ARouteTableAssociation:
+    Condition: PrivateSubnets&3AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet3A
+      RouteTableId:
+        Ref: PrivateSubnet3ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet3ARouteTableAssociation
+  PrivateSubnet4ARouteTable:
+    Condition: PrivateSubnets&4AZCondition
+    Description: Private subnet 4A route table.
+    Value:
+      Ref: PrivateSubnet4ARouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet4ARouteTable
+  PrivateSubnet4ARoute:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&4AZCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet4ARouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway4
+    Metadata:
+      SamResourceId: PrivateSubnet4ARoute
+  PrivateSubnet4ARouteTableAssociation:
+    Condition: PrivateSubnets&4AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet4A
+      RouteTableId:
+        Ref: PrivateSubnet4ARouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet4ARouteTableAssociation
+  PrivateSubnet1BRouteTable:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 1B route table.
+    Value:
+      Ref: PrivateSubnet1BRouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet1BRouteTable
+  PrivateSubnet1BRoute:
+    Condition: AdditionalPrivateSubnets&PublicSubnets&NatGatewaysCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet1BRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway1
+    Metadata:
+      SamResourceId: PrivateSubnet1BRoute
+  PrivateSubnet1BRouteTableAssociation:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1B
+      RouteTableId:
+        Ref: PrivateSubnet1BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet1BRouteTableAssociation
+  PrivateSubnet1BNetworkAcl:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: NACL Protected subnet 1
+      - Key: Network
+        Value: NACL Protected
+    Metadata:
+      SamResourceId: PrivateSubnet1BNetworkAcl
+  PrivateSubnet1BNetworkAclEntryInbound:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet1BNetworkAclEntryInbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: false
+      NetworkAclId:
+        Ref: PrivateSubnet1BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet1BNetworkAclEntryOutbound:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet1BNetworkAclEntryOutbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: true
+      NetworkAclId:
+        Ref: PrivateSubnet1BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet1BNetworkAclAssociation:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1B
+      NetworkAclId:
+        Ref: PrivateSubnet1BNetworkAcl
+    Metadata:
+      SamResourceId: PrivateSubnet1BNetworkAclAssociation
+  PrivateSubnet2BRouteTable:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 2B route table.
+    Value:
+      Ref: PrivateSubnet2BRouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet2BRouteTable
+  PrivateSubnet2BRoute:
+    Condition: AdditionalPrivateSubnets&PublicSubnets&NatGatewaysCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet2BRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway2
+    Metadata:
+      SamResourceId: PrivateSubnet2BRoute
+  PrivateSubnet2BRouteTableAssociation:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2B
+      RouteTableId:
+        Ref: PrivateSubnet2BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet2BRouteTableAssociation
+  PrivateSubnet2BNetworkAcl:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: NACL Protected subnet 2
+      - Key: Network
+        Value: NACL Protected
+    Metadata:
+      SamResourceId: PrivateSubnet2BNetworkAcl
+  PrivateSubnet2BNetworkAclEntryInbound:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet2BNetworkAclEntryInbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: false
+      NetworkAclId:
+        Ref: PrivateSubnet2BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet2BNetworkAclEntryOutbound:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet2BNetworkAclEntryOutbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: true
+      NetworkAclId:
+        Ref: PrivateSubnet2BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet2BNetworkAclAssociation:
+    Condition: AdditionalPrivateSubnetsCondition
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2B
+      NetworkAclId:
+        Ref: PrivateSubnet2BNetworkAcl
+    Metadata:
+      SamResourceId: PrivateSubnet2BNetworkAclAssociation
+  PrivateSubnet3BRouteTable:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Description: Private subnet 3B route table.
+    Value:
+      Ref: PrivateSubnet3BRouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet3BRouteTable
+  PrivateSubnet3BRoute:
+    Condition: AdditionalPrivateSubnets&PublicSubnets&NatGateways&3AZCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet3BRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway3
+    Metadata:
+      SamResourceId: PrivateSubnet3BRoute
+  PrivateSubnet3BRouteTableAssociation:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet3B
+      RouteTableId:
+        Ref: PrivateSubnet3BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet3BRouteTableAssociation
+  PrivateSubnet3BNetworkAcl:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: NACL Protected subnet 3
+      - Key: Network
+        Value: NACL Protected
+    Metadata:
+      SamResourceId: PrivateSubnet3BNetworkAcl
+  PrivateSubnet3BNetworkAclEntryInbound:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet3BNetworkAclEntryInbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: false
+      NetworkAclId:
+        Ref: PrivateSubnet3BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet3BNetworkAclEntryOutbound:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet3BNetworkAclEntryOutbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: true
+      NetworkAclId:
+        Ref: PrivateSubnet3BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet3BNetworkAclAssociation:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet3B
+      NetworkAclId:
+        Ref: PrivateSubnet3BNetworkAcl
+    Metadata:
+      SamResourceId: PrivateSubnet3BNetworkAclAssociation
+  PrivateSubnet4BRouteTable:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Description: Private subnet 4B route table.
+    Value:
+      Ref: PrivateSubnet4BRouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet4BRouteTable
+  PrivateSubnet4BRoute:
+    Condition: AdditionalPrivateSubnets&PublicSubnets&NatGateways&4AZCondition
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateSubnet4BRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NATGateway4
+    Metadata:
+      SamResourceId: PrivateSubnet4BRoute
+  PrivateSubnet4BRouteTableAssociation:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet4B
+      RouteTableId:
+        Ref: PrivateSubnet4BRouteTable
+    Metadata:
+      SamResourceId: PrivateSubnet4BRouteTableAssociation
+  PrivateSubnet4BNetworkAcl:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: NACL Protected subnet 4
+      - Key: Network
+        Value: NACL Protected
+    Metadata:
+      SamResourceId: PrivateSubnet4BNetworkAcl
+  PrivateSubnet4BNetworkAclEntryInbound:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet4BNetworkAclEntryInbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: false
+      NetworkAclId:
+        Ref: PrivateSubnet4BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet4BNetworkAclEntryOutbound:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W66
+          reason: (W66) To avoid opening all ports for allow rules, EC2 NetworkACL
+            entry protocol should be either 6 for TCP, 17 for UDP, 1 for ICMP, or
+            58 for ICMPv6 (which must include an IPv6 CIDR block, ICMP type, and code).
+      SamResourceId: PrivateSubnet4BNetworkAclEntryOutbound
+    Properties:
+      CidrBlock: '0.0.0.0/0'
+      Egress: true
+      NetworkAclId:
+        Ref: PrivateSubnet4BNetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  PrivateSubnet4BNetworkAclAssociation:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet4B
+      NetworkAclId:
+        Ref: PrivateSubnet4BNetworkAcl
+    Metadata:
+      SamResourceId: PrivateSubnet4BNetworkAclAssociation
+  PublicSubnetRouteTable:
+    Condition: PublicSubnetsCondition
+    Description: Public subnet route table.
+    Value:
+      Ref: PublicSubnetRouteTable
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnetRouteTable
+    Metadata:
+      SamResourceId: PublicSubnetRouteTable
+  PublicSubnetRoute:
+    Condition: PublicSubnetsCondition
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: InternetGateway
+    Metadata:
+      SamResourceId: PublicSubnetRoute
+  PublicSubnet1RouteTableAssociation:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+    Metadata:
+      SamResourceId: PublicSubnet1RouteTableAssociation
+  PublicSubnet2RouteTableAssociation:
+    Condition: PublicSubnetsCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+    Metadata:
+      SamResourceId: PublicSubnet2RouteTableAssociation
+  PublicSubnet3RouteTableAssociation:
+    Condition: PublicSubnets&3AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet3
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+    Metadata:
+      SamResourceId: PublicSubnet3RouteTableAssociation
+  PublicSubnet4RouteTableAssociation:
+    Condition: PublicSubnets&4AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet4
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+    Metadata:
+      SamResourceId: PublicSubnet4RouteTableAssociation
+  NAT1EIP:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Description: NAT 1 IP address.
+    Value:
+      Ref: NAT1EIP
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NAT1EIP
+    Metadata:
+      SamResourceId: NAT1EIP
+  NAT2EIP:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Description: NAT 2 IP address.
+    Value:
+      Ref: NAT2EIP
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NAT2EIP
+    Metadata:
+      SamResourceId: NAT2EIP
+  NAT3EIP:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&3AZCondition
+    Description: NAT 3 IP address.
+    Value:
+      Ref: NAT3EIP
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NAT3EIP
+    Metadata:
+      SamResourceId: NAT3EIP
+  NAT4EIP:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&4AZCondition
+    Description: NAT 4 IP address.
+    Value:
+      Ref: NAT4EIP
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NAT4EIP
+    Metadata:
+      SamResourceId: NAT4EIP
+  NATGateway1:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NAT1EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+      Tags:
+      - Key: Name
+        Value: NATGateway1
+    Metadata:
+      SamResourceId: NATGateway1
+  NATGateway2:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NAT2EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: NATGateway2
+    Metadata:
+      SamResourceId: NATGateway2
+  NATGateway3:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&3AZCondition
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NAT3EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet3
+      Tags:
+      - Key: Name
+        Value: NATGateway3
+    Metadata:
+      SamResourceId: NATGateway3
+  NATGateway4:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&4AZCondition
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NAT4EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet4
+      Tags:
+      - Key: Name
+        Value: NATGateway4
+    Metadata:
+      SamResourceId: NATGateway4
+  S3VPCEndpoint:
+    Condition: PrivateSubnetsCondition
+    Description: S3 VPC Endpoint.
+    Value:
+      Ref: S3VPCEndpoint
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-S3VPCEndpoint
+    Metadata:
+      SamResourceId: S3VPCEndpoint
+  VPCFlowLogsRole:
+    Condition: VPCFlowLogsToCloudWatchCondition
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Rights to publish VPC flow logs to CloudWatch Logs.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action: sts:AssumeRole
+          Principal:
+            Service:
+            - vpc-flow-logs.amazonaws.com
+      Path: /
+      Policies:
+      - PolicyName: CloudWatchLogGroup
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: CloudWatchLogs
+            Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogGroups
+            - logs:DescribeLogStreams
+            Resource:
+              Fn::GetAtt:
+              - VPCFlowLogsLogGroup
+              - Arn
+    Metadata:
+      SamResourceId: VPCFlowLogsRole
+  VPCFlowLogsLogGroup:
+    Condition: VPCFlowLogsToCloudWatchCondition
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays:
+        Ref: VPCFlowLogsLogGroupRetention
+      KmsKeyId:
+        Fn::If:
+        - VPCFlowLogsCloudWatchKMSKeyCondition
+        - Ref: VPCFlowLogsCloudWatchKMSKey
+        - Ref: AWS::NoValue
+    Metadata:
+      SamResourceId: VPCFlowLogsLogGroup
+  VPCFlowLogsToCloudWatch:
+    Condition: VPCFlowLogsToCloudWatchCondition
+    Type: AWS::EC2::FlowLog
+    Properties:
+      LogDestinationType: cloud-watch-logs
+      LogGroupName:
+        Ref: VPCFlowLogsLogGroup
+      DeliverLogsPermissionArn:
+        Fn::GetAtt:
+        - VPCFlowLogsRole
+        - Arn
+      LogFormat:
+        Ref: VPCFlowLogsLogFormat
+      MaxAggregationInterval:
+        Ref: VPCFlowLogsMaxAggregationInterval
+      ResourceId:
+        Ref: VPC
+      ResourceType: VPC
+      TrafficType:
+        Ref: VPCFlowLogsTrafficType
+      Tags:
+      - Key: Name
+        Value: VPC Flow Logs CloudWatch
+    Metadata:
+      SamResourceId: VPCFlowLogsToCloudWatch
+  NATGateway1ID:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Description: NATGateway 1 ID.
+    Value:
+      Ref: NATGateway1
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NATGateway1
+    Metadata:
+      SamResourceId: NATGateway1ID
+  NATGateway2ID:
+    Condition: NATGateways&PublicSubnets&PrivateSubnetsCondition
+    Description: NATGateway 2 ID.
+    Value:
+      Ref: NATGateway2
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NATGateway2
+    Metadata:
+      SamResourceId: NATGateway2ID
+  NATGateway3ID:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&3AZCondition
+    Description: NATGateway 3 ID.
+    Value:
+      Ref: NATGateway3
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NATGateway3
+    Metadata:
+      SamResourceId: NATGateway3ID
+  NATGateway4ID:
+    Condition: NATGateways&PublicSubnets&PrivateSubnets&4AZCondition
+    Description: NATGateway 4 ID.
+    Value:
+      Ref: NATGateway4
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-NATGateway4
+    Metadata:
+      SamResourceId: NATGateway4ID
+  PrivateSubnet1ACIDR:
+    Condition: PrivateSubnetsCondition
+    Description: Private subnet 1A CIDR in Availability Zone 1.
+    Value:
+      Ref: PrivateSubnet1ACIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1ACIDR
+    Metadata:
+      SamResourceId: PrivateSubnet1ACIDR
+  PrivateSubnet1AID:
+    Condition: PrivateSubnetsCondition
+    Description: Private subnet 1A ID in Availability Zone 1.
+    Value:
+      Ref: PrivateSubnet1A
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1AID
+    Metadata:
+      SamResourceId: PrivateSubnet1AID
+  PrivateSubnet1BCIDR:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 1B CIDR in Availability Zone 1.
+    Value:
+      Ref: PrivateSubnet1BCIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1BCIDR
+    Metadata:
+      SamResourceId: PrivateSubnet1BCIDR
+  PrivateSubnet1BID:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 1B ID in Availability Zone 1.
+    Value:
+      Ref: PrivateSubnet1B
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet1BID
+    Metadata:
+      SamResourceId: PrivateSubnet1BID
+  PrivateSubnet2ACIDR:
+    Condition: PrivateSubnetsCondition
+    Description: Private subnet 2A CIDR in Availability Zone 2.
+    Value:
+      Ref: PrivateSubnet2ACIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2ACIDR
+    Metadata:
+      SamResourceId: PrivateSubnet2ACIDR
+  PrivateSubnet2AID:
+    Condition: PrivateSubnetsCondition
+    Description: Private subnet 2A ID in Availability Zone 2.
+    Value:
+      Ref: PrivateSubnet2A
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2AID
+    Metadata:
+      SamResourceId: PrivateSubnet2AID
+  PrivateSubnet2BCIDR:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 2B CIDR in Availability Zone 2.
+    Value:
+      Ref: PrivateSubnet2BCIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2BCIDR
+    Metadata:
+      SamResourceId: PrivateSubnet2BCIDR
+  PrivateSubnet2BID:
+    Condition: AdditionalPrivateSubnetsCondition
+    Description: Private subnet 2B ID in Availability Zone 2.
+    Value:
+      Ref: PrivateSubnet2B
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet2BID
+    Metadata:
+      SamResourceId: PrivateSubnet2BID
+  PrivateSubnet3ACIDR:
+    Condition: PrivateSubnets&3AZCondition
+    Description: Private subnet 3A CIDR in Availability Zone 3.
+    Value:
+      Ref: PrivateSubnet3ACIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3ACIDR
+    Metadata:
+      SamResourceId: PrivateSubnet3ACIDR
+  PrivateSubnet3AID:
+    Condition: PrivateSubnets&3AZCondition
+    Description: Private subnet 3A ID in Availability Zone 3.
+    Value:
+      Ref: PrivateSubnet3A
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3AID
+    Metadata:
+      SamResourceId: PrivateSubnet3AID
+  PrivateSubnet3BCIDR:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Description: Private subnet 3B CIDR in Availability Zone 3.
+    Value:
+      Ref: PrivateSubnet3BCIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3BCIDR
+    Metadata:
+      SamResourceId: PrivateSubnet3BCIDR
+  PrivateSubnet3BID:
+    Condition: AdditionalPrivateSubnets&3AZCondition
+    Description: Private subnet 3B ID in Availability Zone 3.
+    Value:
+      Ref: PrivateSubnet3B
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet3BID
+    Metadata:
+      SamResourceId: PrivateSubnet3BID
+  PrivateSubnet4ACIDR:
+    Condition: PrivateSubnets&4AZCondition
+    Description: Private subnet 4A CIDR in Availability Zone 4.
+    Value:
+      Ref: PrivateSubnet4ACIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4ACIDR
+    Metadata:
+      SamResourceId: PrivateSubnet4ACIDR
+  PrivateSubnet4AID:
+    Condition: PrivateSubnets&4AZCondition
+    Description: Private subnet 4A ID in Availability Zone 4.
+    Value:
+      Ref: PrivateSubnet4A
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4AID
+    Metadata:
+      SamResourceId: PrivateSubnet4AID
+  PrivateSubnet4BCIDR:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Description: Private subnet 4B CIDR in Availability Zone 4.
+    Value:
+      Ref: PrivateSubnet4BCIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4BCIDR
+    Metadata:
+      SamResourceId: PrivateSubnet4BCIDR
+  PrivateSubnet4BID:
+    Condition: AdditionalPrivateSubnets&4AZCondition
+    Description: Private subnet 4B ID in Availability Zone 4.
+    Value:
+      Ref: PrivateSubnet4B
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PrivateSubnet4BID
+    Metadata:
+      SamResourceId: PrivateSubnet4BID
+  PublicSubnet1CIDR:
+    Condition: PublicSubnetsCondition
+    Description: Public subnet 1 CIDR in Availability Zone 1.
+    Value:
+      Ref: PublicSubnet1CIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet1CIDR
+    Metadata:
+      SamResourceId: PublicSubnet1CIDR
+  PublicSubnet1ID:
+    Condition: PublicSubnetsCondition
+    Description: Public subnet 1 ID in Availability Zone 1.
+    Value:
+      Ref: PublicSubnet1
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet1ID
+    Metadata:
+      SamResourceId: PublicSubnet1ID
+  PublicSubnet2CIDR:
+    Condition: PublicSubnetsCondition
+    Description: Public subnet 2 CIDR in Availability Zone 2.
+    Value:
+      Ref: PublicSubnet2CIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet2CIDR
+    Metadata:
+      SamResourceId: PublicSubnet2CIDR
+  PublicSubnet2ID:
+    Condition: PublicSubnetsCondition
+    Description: Public subnet 2 ID in Availability Zone 2.
+    Value:
+      Ref: PublicSubnet2
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet2ID
+    Metadata:
+      SamResourceId: PublicSubnet2ID
+  PublicSubnet3CIDR:
+    Condition: PublicSubnets&3AZCondition
+    Description: Public subnet 3 CIDR in Availability Zone 3.
+    Value:
+      Ref: PublicSubnet3CIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet3CIDR
+    Metadata:
+      SamResourceId: PublicSubnet3CIDR
+  PublicSubnet3ID:
+    Condition: PublicSubnets&3AZCondition
+    Description: Public subnet 3 ID in Availability Zone 3.
+    Value:
+      Ref: PublicSubnet3
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet3ID
+    Metadata:
+      SamResourceId: PublicSubnet3ID
+  PublicSubnet4CIDR:
+    Condition: PublicSubnets&4AZCondition
+    Description: Public subnet 4 CIDR in Availability Zone 4.
+    Value:
+      Ref: PublicSubnet4CIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet4CIDR
+    Metadata:
+      SamResourceId: PublicSubnet4CIDR
+  PublicSubnet4ID:
+    Condition: PublicSubnets&4AZCondition
+    Description: Public subnet 4 ID in Availability Zone 4.
+    Value:
+      Ref: PublicSubnet4
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PublicSubnet4ID
+    Metadata:
+      SamResourceId: PublicSubnet4ID
+  VPCCIDR:
+    Description: VPC CIDR.
+    Value:
+      Ref: VPCCIDR
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-VPCCIDR
+    Metadata:
+      SamResourceId: VPCCIDR
+  VPCID:
+    Description: VPC ID.
+    Value:
+      Ref: VPC
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-VPCID
+    Metadata:
+      SamResourceId: VPCID

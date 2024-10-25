@@ -44,6 +44,7 @@ Parameters:
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
   TestUserPassword:
     Type: String
+    Default: 'Password123!'
     MinLength: 8
     NoEcho: true
     AllowedPattern: '[[[A-Z]{1,}[a-z]{1,}[0-9]{1,}\!\#\@\$\%\^\&*\(\)_+\-=+\[\]\{\}\|]]{8,}'
@@ -672,7 +673,7 @@ Resources:
       DBInstanceClass: db.t4g.small
       AllocatedStorage: '20'
       Engine: MySQL
-      EngineVersion: 8.0.28
+      EngineVersion: '8.0.20'
       MasterUsername: !Sub '{{resolve:secretsmanager:${MySQLDBSecret}::username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${MySQLDBSecret}::password}}'
       DBSubnetGroupName: !Ref DBSubnetGroup
@@ -784,30 +785,46 @@ Resources:
     Type: AWS::DMS::Certificate
     Properties:
       CertificateIdentifier: rds-ca-2019-root
-      CertificatePem: |-
+      CertificatePem: |
         -----BEGIN CERTIFICATE-----
-        MIIEBjCCAu6gAwIBAgIJAMc0ZzaSUK51MA0GCSqGSIb3DQEBCwUAMIGPMQswCQYD
-        VQQGEwJVUzEQMA4GA1UEBwwHU2VhdHRsZTETMBEGA1UECAwKV2FzaGluZ3RvbjEi
-        MCAGA1UECgwZQW1hem9uIFdlYiBTZXJ2aWNlcywgSW5jLjETMBEGA1UECwwKQW1h
-        em9uIFJEUzEgMB4GA1UEAwwXQW1hem9uIFJEUyBSb290IDIwMTkgQ0EwHhcNMTkw
-        ODIyMTcwODUwWhcNMjQwODIyMTcwODUwWjCBjzELMAkGA1UEBhMCVVMxEDAOBgNV
-        BAcMB1NlYXR0bGUxEzARBgNVBAgMCldhc2hpbmd0b24xIjAgBgNVBAoMGUFtYXpv
-        biBXZWIgU2VydmljZXMsIEluYy4xEzARBgNVBAsMCkFtYXpvbiBSRFMxIDAeBgNV
-        BAMMF0FtYXpvbiBSRFMgUm9vdCAyMDE5IENBMIIBIjANBgkqhkiG9w0BAQEFAAOC
-        AQ8AMIIBCgKCAQEArXnF/E6/Qh+ku3hQTSKPMhQQlCpoWvnIthzX6MK3p5a0eXKZ
-        oWIjYcNNG6UwJjp4fUXl6glp53Jobn+tWNX88dNH2n8DVbppSwScVE2LpuL+94vY
-        0EYE/XxN7svKea8YvlrqkUBKyxLxTjh+U/KrGOaHxz9v0l6ZNlDbuaZw3qIWdD/I
-        6aNbGeRUVtpM6P+bWIoxVl/caQylQS6CEYUk+CpVyJSkopwJlzXT07tMoDL5WgX9
-        O08KVgDNz9qP/IGtAcRduRcNioH3E9v981QO1zt/Gpb2f8NqAjUUCUZzOnij6mx9
-        McZ+9cWX88CRzR0vQODWuZscgI08NvM69Fn2SQIDAQABo2MwYTAOBgNVHQ8BAf8E
-        BAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUc19g2LzLA5j0Kxc0LjZa
-        pmD/vB8wHwYDVR0jBBgwFoAUc19g2LzLA5j0Kxc0LjZapmD/vB8wDQYJKoZIhvcN
-        AQELBQADggEBAHAG7WTmyjzPRIM85rVj+fWHsLIvqpw6DObIjMWokpliCeMINZFV
-        ynfgBKsf1ExwbvJNzYFXW6dihnguDG9VMPpi2up/ctQTN8tm9nDKOy08uNZoofMc
-        NUZxKCEkVKZv+IL4oHoeayt8egtv3ujJM6V14AstMQ6SwvwvA93EP/Ug2e4WAXHu
-        cbI1NAbUgVDqp+DRdfvZkgYKryjTWd/0+1fS8X1bBZVWzl7eirNVnHbSH2ZDpNuY
-        0SBd8dj5F6ld3t58ydZbrTHze7JJOd8ijySAp4/kiu9UfZWuTPABzDa/DSdz9Dk/
-        zPW4CXXvhLmE02TA9/HeCw3KEHIwicNuEfw=
+        MIIHDTCCBXWgAwIBAgIJAMstgJlaaVJfMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNV
+        BAYTAlhZMSYwJAYDVQQKDB1QeXRob24gU29mdHdhcmUgRm91bmRhdGlvbiBDQTEW
+        MBQGA1UEAwwNb3VyLWNhLXNlcnZlcjAeFw0xODA4MjkxNDIzMTZaFw0zNzEwMjgx
+        NDIzMTZaMF0xCzAJBgNVBAYTAlhZMRcwFQYDVQQHDA5DYXN0bGUgQW50aHJheDEj
+        MCEGA1UECgwaUHl0aG9uIFNvZnR3YXJlIEZvdW5kYXRpb24xEDAOBgNVBAMMB2Fs
+        bHNhbnMwggGiMA0GCSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQDBGvj+Uy/VUyTR
+        mmIA1UEENThh0+pWODcvvUlkeIo+XTJ3FhF4/RVjImDHjozl28Xf2TzKnvQJa1KC
+        pqa7fr8cL9QMwk4pH+S4ulxOu02Bl3Yafx2oJVUML37vciJg+zkzPx1k3tXFjXkr
+        LGjZwOoufBC3AmPuq2xHFBzHrvp5/DIRH2slQFM9fpVZzN77gYyzxba0wCfCPpCf
+        eJFRyYKW8c7MXrwnM82YtE7Rlnf227EkCdMNaSeZLUIxeVpcnScqZl0SIbR3YEiV
+        0LPFkx0wJFm8qUEFU/h+0jamgy/ON+11nqmMlp3BjNi/JTVsa7N7A3dvdHC7VVlr
+        WnUgU6MoSniyL6ijpucyHtZzK2mJy0sHR8PadHKow0O423/5N8GKTSOvaGMXTjAe
+        OGs+9/P1ZYo3IjjQPz/NV3QlhK8zRqxF3cW0ekHHkT+/jZjCvSKm6mdbMQunKE1W
+        +dokAc815pb48Mzf1eWKd/7UyUf7CXussyAaJ3clpaK1sbbn9m0CAwEAAaOCAt4w
+        ggLaMIIBMAYDVR0RBIIBJzCCASOCB2FsbHNhbnOgHgYDKgMEoBcMFXNvbWUgb3Ro
+        ZXIgaWRlbnRpZmllcqA1BgYrBgEFAgKgKzApoBAbDktFUkJFUk9TLlJFQUxNoRUw
+        E6ADAgEBoQwwChsIdXNlcm5hbWWBEHVzZXJAZXhhbXBsZS5vcmeCD3d3dy5leGFt
+        cGxlLm9yZ6RnMGUxCzAJBgNVBAYTAlhZMRcwFQYDVQQHDA5DYXN0bGUgQW50aHJh
+        eDEjMCEGA1UECgwaUHl0aG9uIFNvZnR3YXJlIEZvdW5kYXRpb24xGDAWBgNVBAMM
+        D2Rpcm5hbWUgZXhhbXBsZYYXaHR0cHM6Ly93d3cucHl0aG9uLm9yZy+HBH8AAAGH
+        EAAAAAAAAAAAAAAAAAAAAAGIBCoDBAUwDgYDVR0PAQH/BAQDAgWgMB0GA1UdJQQW
+        MBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBTU
+        8dgj4KfpyhJFoA0DwiWm6GW87jB9BgNVHSMEdjB0gBSziqCiunHxqCR51KRbJTYV
+        HknIzaFRpE8wTTELMAkGA1UEBhMCWFkxJjAkBgNVBAoMHVB5dGhvbiBTb2Z0d2Fy
+        ZSBGb3VuZGF0aW9uIENBMRYwFAYDVQQDDA1vdXItY2Etc2VydmVyggkAyy2AmVpp
+        UlswgYMGCCsGAQUFBwEBBHcwdTA8BggrBgEFBQcwAoYwaHR0cDovL3Rlc3RjYS5w
+        eXRob250ZXN0Lm5ldC90ZXN0Y2EvcHljYWNlcnQuY2VyMDUGCCsGAQUFBzABhilo
+        dHRwOi8vdGVzdGNhLnB5dGhvbnRlc3QubmV0L3Rlc3RjYS9vY3NwLzBDBgNVHR8E
+        PDA6MDigNqA0hjJodHRwOi8vdGVzdGNhLnB5dGhvbnRlc3QubmV0L3Rlc3RjYS9y
+        ZXZvY2F0aW9uLmNybDANBgkqhkiG9w0BAQsFAAOCAYEAcHfYgrD0q96EzogyY14j
+        D7ZYorFl/xIiC4im+gZAmudjp12ulMVoPEvplTQBdSTfnW6b5P8/YZcpe6s0LBTT
+        AdLr+4RA2xJUfnpEvAjrn+IVCxFPJdJWUZWtba0Hqmph+TnVgoxFMZ8q/xiYSQy7
+        F63VJNPRx8QQPsR5Jlj0xd6CFsTDxKejYiJBkDYPvEz9ahgi8ofpB9u0PWUA5HD5
+        1uWoobnJneddeKqY1fj0/VzZTNBtv4dx01vs9L9G+cj4EMVyr8MVucQGZws/9vRk
+        xSd0wWsAN9rqGDZ3Nqc+gC5dVA8B386el93J8otZgsVlMchzIP0kIyXYAN+QkyZ2
+        CAoGqQ7T00xv76f73usqQLnksUQMN8rGnkRKtHwsQFI1u7NxKD01/b7JT1SzmcVf
+        hDj7K/vq3YjoncGbZ4c9eXs9fmEfcDy3yEwXpQyjKMerSBEU95h62k77kXaJCqbG
+        cuCW2fGA6miQN1zGacfXvMfRrlupElnG5GxhqYu6UbMT
         -----END CERTIFICATE-----
 
   DBEndpoint:
@@ -1322,12 +1339,12 @@ Resources:
             - id: W28
               reason: "Explicit name to use on instructions with the users."
 
-  RDSServiceRole:
-    Type: "AWS::IAM::ServiceLinkedRole"
-    # Condition: CreateRDSServiceRole
-    Properties:
-      AWSServiceName: "rds.amazonaws.com"
-      Description: Allows Amazon RDS to manage AWS resources on your behalf
+  # RDSServiceRole:
+  #   Type: "AWS::IAM::ServiceLinkedRole"
+  #   #Condition: CreateRDSServiceRole
+  #   Properties:
+  #     AWSServiceName: "rds.amazonaws.com"
+  #     Description: Allows Amazon RDS to manage AWS resources on your behalf
  
 
   DMSAccessRole:
